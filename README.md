@@ -1,15 +1,333 @@
-# Elysia with Bun runtime
+# Backend API with Authentication
 
-## Getting Started
-To get started with this template, simply paste this command into your terminal:
+A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed for mobile app integration.
+
+## Features
+
+- 🚀 **ElysiaJS** - Fast and modern web framework
+- 🔐 **Better-Auth** - Comprehensive authentication system
+- 🗄️ **Drizzle ORM** - Type-safe database operations with PostgreSQL
+- 📱 **Mobile-Ready** - CORS configured for mobile app integration
+- 🛡️ **Protected Routes** - Session-based authentication middleware
+- 🔄 **Session Management** - Create, list, and revoke user sessions
+- ✅ **Health Checks** - Monitor API and database health
+
+## Quick Start
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) (latest version)
+- PostgreSQL database
+- Node.js 18+ (for compatibility)
+
+### Installation
+
+1. **Clone and install dependencies:**
 ```bash
-bun create elysia ./elysia-example
+git clone <your-repo>
+cd backend
+bun install
 ```
 
-## Development
-To start the development server run:
+2. **Set up environment variables:**
+```bash
+cp .env.example .env
+# Edit .env with your database URL and auth secret
+```
+
+3. **Set up the database:**
+```bash
+# Generate migrations
+bun run db:generate
+
+# Run migrations
+bun run db:migrate
+
+# Optional: Open Drizzle Studio
+bun run db:studio
+```
+
+4. **Start the development server:**
 ```bash
 bun run dev
 ```
 
-Open http://localhost:3000/ with your browser to see the result.
+The server will start at `http://localhost:3000`
+
+## API Documentation
+
+### Health Endpoints
+
+#### GET /health
+Basic health check
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-06-02T18:00:00.000Z",
+  "bunVersion": "1.0.0",
+  "uptime": 123.45
+}
+```
+
+#### GET /db-health
+Database connectivity check
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "timestamp": "2025-06-02T18:00:00.000Z"
+}
+```
+
+### Authentication Endpoints
+
+#### POST /auth/sign-up
+Register a new user
+```bash
+curl -X POST http://localhost:3000/auth/sign-up \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+Response:
+```json
+{
+  "message": "Account created successfully",
+  "user": {
+    "id": "user_id",
+    "email": "john@example.com",
+    "name": "John Doe",
+    "emailVerified": false,
+    "createdAt": "2025-06-02T18:00:00.000Z"
+  }
+}
+```
+
+#### POST /auth/sign-in
+Sign in user
+```bash
+curl -X POST http://localhost:3000/auth/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+Response:
+```json
+{
+  "message": "Signed in successfully",
+  "user": { /* user object */ },
+  "token": "session_token_here"
+}
+```
+
+#### POST /auth/sign-out
+Sign out user (requires authentication)
+```bash
+curl -X POST http://localhost:3000/auth/sign-out \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### GET /auth/me
+Get current user information
+```bash
+curl -X GET http://localhost:3000/auth/me \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Protected API Endpoints
+
+All protected endpoints require the `Authorization: Bearer TOKEN` header.
+
+#### GET /api/profile
+Get current user profile
+```bash
+curl -X GET http://localhost:3000/api/profile \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### PUT /api/profile
+Update user profile
+```bash
+curl -X PUT http://localhost:3000/api/profile \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Name",
+    "email": "new@example.com"
+  }'
+```
+
+#### GET /api/users
+Get all users (admin-like endpoint)
+```bash
+curl -X GET http://localhost:3000/api/users \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### GET /api/sessions
+Get user's active sessions
+```bash
+curl -X GET http://localhost:3000/api/sessions \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### DELETE /api/sessions/:sessionId
+Revoke a specific session
+```bash
+curl -X DELETE http://localhost:3000/api/sessions/SESSION_ID \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### POST /api/sessions/revoke-all
+Revoke all other sessions (except current)
+```bash
+curl -X POST http://localhost:3000/api/sessions/revoke-all \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Mobile App Integration
+
+### Authentication Flow
+
+1. **Register/Sign In**: Use `/auth/sign-up` or `/auth/sign-in` to get a session token
+2. **Store Token**: Save the token securely in your mobile app (e.g., Keychain/Keystore)
+3. **API Calls**: Include the token in the `Authorization: Bearer TOKEN` header for protected endpoints
+4. **Token Management**: Monitor token expiration and refresh as needed
+
+### Example Integration (React Native)
+
+```javascript
+// Sign in
+const signIn = async (email, password) => {
+  const response = await fetch('http://localhost:3000/auth/sign-in', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  
+  const data = await response.json();
+  if (data.token) {
+    // Store token securely
+    await AsyncStorage.setItem('auth_token', data.token);
+    return data.user;
+  }
+  throw new Error(data.error);
+};
+
+// Make authenticated API call
+const getProfile = async () => {
+  const token = await AsyncStorage.getItem('auth_token');
+  const response = await fetch('http://localhost:3000/api/profile', {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+  
+  return response.json();
+};
+```
+
+## Database Schema
+
+### Users Table
+- `id` - Primary key
+- `name` - User's display name
+- `email` - User's email (unique)
+- `emailVerified` - Email verification status
+- `image` - Profile image URL
+- `createdAt` - Account creation timestamp
+- `updatedAt` - Last update timestamp
+
+### Sessions Table
+- `id` - Primary key
+- `token` - Session token (unique)
+- `userId` - Foreign key to users table
+- `expiresAt` - Session expiration time
+- `ipAddress` - Client IP address
+- `userAgent` - Client user agent
+- `createdAt` - Session creation timestamp
+
+### Accounts & Verification Tables
+Additional tables for OAuth providers and email verification (managed by better-auth).
+
+## Development
+
+### Available Scripts
+
+```bash
+# Development
+bun run dev          # Start development server with watch mode
+
+# Database
+bun run db:generate  # Generate new migrations
+bun run db:migrate   # Run pending migrations
+bun run db:push      # Push schema changes directly to DB
+bun run db:studio    # Open Drizzle Studio
+
+# Testing
+./test-complete-auth.sh  # Run complete authentication flow test
+```
+
+### Testing
+
+Use the included test script to verify all endpoints:
+
+```bash
+# Make sure the server is running
+bun run dev
+
+# In another terminal, run the test
+./test-complete-auth.sh
+```
+
+The test script will:
+1. Test health endpoints
+2. Register a new user
+3. Sign in and get a token
+4. Test all protected endpoints
+5. Update user profile
+6. Manage sessions
+7. Test sign out flow
+
+## Environment Variables
+
+Create a `.env` file with:
+
+```env
+# Database
+DATABASE_URL="postgresql://username:password@localhost:5432/database_name"
+
+# Authentication
+AUTH_SECRET="your-super-secret-auth-key-here"
+```
+
+## Production Deployment
+
+1. **Environment**: Set production environment variables
+2. **Database**: Use a production PostgreSQL instance
+3. **CORS**: Configure specific origins instead of allowing all
+4. **SSL**: Enable HTTPS for production
+5. **Monitoring**: Add logging and error tracking
+
+## Tech Stack
+
+- **Runtime**: Bun
+- **Framework**: ElysiaJS
+- **Database**: PostgreSQL
+- **ORM**: Drizzle ORM
+- **Authentication**: better-auth
+- **Validation**: TypeBox (via Elysia)
+- **CORS**: @elysiajs/cors
+
+## License
+
+MIT
