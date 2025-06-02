@@ -10,6 +10,7 @@ A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed
 - 📱 **Mobile-Ready** - CORS configured for mobile app integration
 - 🛡️ **Protected Routes** - Session-based authentication middleware
 - 🔄 **Session Management** - Create, list, and revoke user sessions
+- 🧹 **Automatic Cleanup** - ElysiaJS cron job for expired session cleanup
 - ✅ **Health Checks** - Monitor API and database health
 
 ## Quick Start
@@ -191,6 +192,60 @@ Revoke all other sessions (except current)
 curl -X POST http://localhost:3000/api/sessions/revoke-all \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+### Session Management & Cleanup
+
+The backend includes automatic session cleanup functionality to remove expired sessions from the database.
+
+#### Automatic Cleanup (Cron Job)
+- **Schedule**: Runs every hour at minute 0 (e.g., 1:00, 2:00, 3:00, etc.)
+- **Function**: Automatically removes sessions where `expiresAt` is less than the current timestamp
+- **Logging**: Logs cleanup results to the console
+
+#### Manual Session Management
+
+#### GET /debug/session-stats
+Get statistics about sessions (for monitoring)
+```bash
+curl -X GET http://localhost:3000/debug/session-stats
+```
+
+Response:
+```json
+{
+  "total": 25,
+  "active": 20,
+  "expired": 5,
+  "timestamp": "2025-06-02T18:00:00.000Z"
+}
+```
+
+#### POST /debug/cleanup-sessions
+Manually trigger session cleanup
+```bash
+curl -X POST http://localhost:3000/debug/cleanup-sessions
+```
+
+Response:
+```json
+{
+  "message": "Session cleanup completed",
+  "deletedCount": 5,
+  "timestamp": "2025-06-02T18:00:00.000Z"
+}
+```
+
+#### Testing Session Cleanup
+Run the comprehensive test script:
+```bash
+./scripts/test-session-cleanup.sh
+```
+
+This script tests:
+- Server and database health
+- Session statistics retrieval
+- Manual session cleanup
+- Verification of cleanup results
 
 ## Mobile App Integration
 
