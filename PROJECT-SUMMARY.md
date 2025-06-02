@@ -2,14 +2,17 @@
 
 ## ✅ What We've Built
 
-A complete, production-ready backend API with comprehensive Google OAuth authentication system and automatic session management, designed specifically for mobile app integration.
+A complete, production-ready backend API with comprehensive OAuth authentication system (Google & Apple Sign In) and automatic session management, designed specifically for mobile app integration.
 
 ## 🚀 Key Features Implemented
 
-### 1. **Google OAuth Authentication System**
-- ✅ Google Sign In with ID token validation
-- ✅ Server-side Google token verification using google-auth-library
-- ✅ Automatic user creation/lookup based on Google profile
+### 1. **Unified OAuth Authentication System**
+- ✅ **Google Sign In** with ID token validation using google-auth-library
+- ✅ **Apple Sign In** with ID token validation using apple-signin-auth
+- ✅ Provider-specific endpoints (`POST /auth/google`, `POST /auth/apple`)
+- ✅ Dynamic provider validation and error handling
+- ✅ Automatic user creation/lookup based on OAuth profile
+- ✅ Apple-specific user data handling (first-time sign-in support)
 - ✅ Secure session token generation and management
 - ✅ Session-based authentication middleware
 - ✅ Token validation for protected routes
@@ -26,7 +29,7 @@ A complete, production-ready backend API with comprehensive Google OAuth authent
 - ✅ `/api/sessions` - Manage user sessions
 - ✅ Session revocation (individual & bulk)
 
-### 3. **Database Integration**
+### 4. **Database Integration**
 - ✅ PostgreSQL with Drizzle ORM
 - ✅ Complete better-auth schema (users, sessions, accounts, verification)
 - ✅ Type-safe database operations

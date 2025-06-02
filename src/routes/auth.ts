@@ -1,45 +1,56 @@
+// filepath: /Users/michelebroggi/Desktop/backend/src/routes/auth.ts
 import { Elysia, t } from "elysia";
-import { OAuth2Client } from "google-auth-library";
 import { db } from "../db/client";
 import { user, session, account } from "../db/schema/auth";
 import { eq, and, gt } from "drizzle-orm";
 import { generateSessionToken, generateId } from "../utils/auth";
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+import { verifyOAuthToken, isProviderSupported, getSupportedProviders } from "../utils/oauth-providers";
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
-    // Google Sign In - handles both sign up and sign in
-    .post("/google", async ({ body, set, request }) => {
+    // Dynamic OAuth provider endpoint - handles both sign up and sign in for any supported provider
+    .post("/:provider", async ({ body, set, request, params }) => {
         try {
-            const { idToken } = body;
+            const { idToken, user: userInfo } = body;
+            const provider = params.provider?.toLowerCase();
 
-            // Verify the Google ID token
-            const ticket = await googleClient.verifyIdToken({
-                idToken,
-                audience: process.env.GOOGLE_CLIENT_ID,
-            });
-
-            const payload = ticket.getPayload();
-            if (!payload) {
+            // Validate provider
+            if (!provider || !isProviderSupported(provider)) {
                 set.status = 400;
-                return { error: "Invalid Google token" };
+                return {
+                    error: "Invalid or unsupported provider",
+                    supportedProviders: getSupportedProviders()
+                };
             }
 
-            const googleUserId = payload.sub;
-            const email = payload.email;
-            const name = payload.name;
-            const picture = payload.picture;
+            // Verify the OAuth token
+            const verificationResult = await verifyOAuthToken(provider, idToken);
 
-            if (!email || !googleUserId || !name) {
+            if (!verificationResult.success || !verificationResult.profile) {
                 set.status = 400;
-                return { error: "Missing required Google user data" };
+                return { error: verificationResult.error || "Token verification failed" };
+            }
+
+            const profile = verificationResult.profile;
+
+            // For Apple, we might receive additional user info on first sign-in
+            let finalName = profile.name;
+            let finalEmail = profile.email;
+
+            if (provider === "apple" && userInfo) {
+                // Apple sends user info separately on first authorization
+                if (userInfo.name && userInfo.name.firstName) {
+                    finalName = `${userInfo.name.firstName} ${userInfo.name.lastName || ''}`.trim();
+                }
+                if (userInfo.email) {
+                    finalEmail = userInfo.email;
+                }
             }
 
             // Check if user already exists
             const existingUsers = await db
                 .select()
                 .from(user)
-                .where(eq(user.email, email))
+                .where(eq(user.email, finalEmail))
                 .limit(1);
 
             let currentUser;
@@ -50,10 +61,10 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
                     .insert(user)
                     .values({
                         id: generateId("user"),
-                        email,
-                        name,
-                        image: picture,
-                        emailVerified: true, // Google emails are verified
+                        email: finalEmail,
+                        name: finalName,
+                        image: profile.picture || null,
+                        emailVerified: profile.emailVerified,
                         createdAt: new Date(),
                         updatedAt: new Date(),
                     })
@@ -61,30 +72,33 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
                 currentUser = newUsers[0];
 
-                // Create account record for Google
+                // Create account record for the OAuth provider
                 await db
                     .insert(account)
                     .values({
                         id: generateId("account"),
                         userId: currentUser.id,
-                        accountId: googleUserId,
-                        providerId: "google",
+                        accountId: profile.id,
+                        providerId: provider,
                         accessToken: null,
                         refreshToken: null,
                         idToken: null,
-                        expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
+                        accessTokenExpiresAt: null,
+                        refreshTokenExpiresAt: null,
+                        scope: null,
+                        password: null,
                         createdAt: new Date(),
                         updatedAt: new Date(),
                     });
             } else {
                 currentUser = existingUsers[0];
 
-                // Update user info from Google (in case name/picture changed)
+                // Update user info from OAuth provider (in case name/picture changed)
                 const updatedUsers = await db
                     .update(user)
                     .set({
-                        name,
-                        image: picture,
+                        name: finalName,
+                        image: profile.picture || currentUser.image,
                         updatedAt: new Date(),
                     })
                     .where(eq(user.id, currentUser.id))
@@ -122,7 +136,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
                 .returning();
 
             return {
-                message: "Successfully signed in with Google",
+                message: `Successfully signed in with ${provider}`,
+                provider,
                 user: {
                     id: currentUser.id,
                     email: currentUser.email,
@@ -139,16 +154,37 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
                 },
             };
         } catch (error) {
-            console.error("Google Sign In error:", error);
+            console.error(`OAuth Sign In error (${params.provider}):`, error);
             set.status = 400;
             return {
-                error: error instanceof Error ? error.message : "Google Sign In failed"
+                error: error instanceof Error ? error.message : "OAuth Sign In failed"
             };
         }
     }, {
         body: t.Object({
             idToken: t.String({ minLength: 1 }),
+            user: t.Optional(t.Object({
+                name: t.Optional(t.Object({
+                    firstName: t.Optional(t.String()),
+                    lastName: t.Optional(t.String()),
+                })),
+                email: t.Optional(t.String()),
+            }))
+        }),
+        params: t.Object({
+            provider: t.String({ minLength: 1 }),
         })
+    })
+
+    // Get supported providers
+    .get("/providers", () => {
+        return {
+            providers: getSupportedProviders(),
+            endpoints: getSupportedProviders().reduce((acc, provider) => {
+                acc[provider] = `POST /auth/${provider}`;
+                return acc;
+            }, {} as Record<string, string>)
+        };
     })
 
     // Sign out user

@@ -1,11 +1,13 @@
-# Backend API with Google Authentication
+# Backend API with OAuth Authentication
 
-A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed for mobile app integration with Google Sign In authentication.
+A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed for mobile app integration with Google and Apple Sign In authentication.
 
 ## Features
 
 - 🚀 **ElysiaJS** - Fast and modern web framework
-- 🔐 **Google Sign In** - OAuth authentication with Google
+- 🔐 **Unified OAuth** - Support for Google and Apple Sign In
+- 🍎 **Apple Sign In** - Native Apple authentication support
+- 🌐 **Google Sign In** - OAuth authentication with Google
 - 🗄️ **Drizzle ORM** - Type-safe database operations with PostgreSQL
 - 📱 **Mobile-Ready** - CORS configured for mobile app integration
 - 🛡️ **Protected Routes** - Session-based authentication middleware
@@ -20,6 +22,7 @@ A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed
 - [Bun](https://bun.sh/) (latest version)
 - PostgreSQL database
 - Google OAuth credentials (Client ID and Client Secret)
+- Apple OAuth credentials (for Apple Sign In support)
 - Node.js 18+ (for compatibility)
 
 ### Installation
@@ -31,17 +34,25 @@ cd backend
 bun install
 ```
 
-2. **Set up Google OAuth:**
+2. **Set up OAuth providers:**
+   
+   **Google OAuth:**
    - Go to the [Google Cloud Console](https://console.cloud.google.com/)
    - Create a new project or select existing one
    - Enable the Google+ API
    - Create OAuth 2.0 credentials
    - Add your domain to authorized origins
+   
+   **Apple Sign In:**
+   - Go to [Apple Developer](https://developer.apple.com/)
+   - Create an App ID with Sign In with Apple capability
+   - Create a Service ID for web authentication
+   - Generate a private key for Apple Sign In
 
 3. **Set up environment variables:**
 ```bash
 cp .env.example .env
-# Edit .env with your database URL, auth secret, and Google OAuth credentials
+# Edit .env with your database URL, auth secret, and OAuth credentials
 ```
 
 Required environment variables:
@@ -49,6 +60,9 @@ Required environment variables:
 DATABASE_URL=postgresql://username:password@localhost:5432/backend_db
 AUTH_SECRET=your-super-secret-key-change-in-production-minimum-32-characters
 GOOGLE_CLIENT_ID=your-google-client-id.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+APPLE_CLIENT_ID=your.apple.bundle.id
+APPLE_CLIENT_SECRET=your-apple-client-secret-or-private-key
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
@@ -98,23 +112,58 @@ Database connectivity check
 
 ### Authentication Endpoints
 
-#### POST /auth/google
-Authenticate with Google ID token
+#### GET /auth/providers
+Get supported OAuth providers
 ```bash
-curl -X POST http://localhost:3000/auth/google \
+curl -X GET http://localhost:3000/auth/providers
+```
+
+Response:
+```json
+{
+  "providers": ["google", "apple"],
+  "endpoints": {
+    "google": "POST /auth/google",
+    "apple": "POST /auth/apple"
+  }
+}
+```
+
+#### POST /auth/google
+**Google Sign In endpoint**
+```bash
+curl -X POST "http://localhost:3000/auth/google" \
   -H "Content-Type: application/json" \
   -d '{
     "idToken": "google-id-token-from-mobile-app"
   }'
 ```
 
-Response:
+#### POST /auth/apple
+**Apple Sign In endpoint** (with optional user info for first-time sign-in)
+```bash
+curl -X POST "http://localhost:3000/auth/apple" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idToken": "apple-id-token-from-mobile-app",
+    "user": {
+      "name": {
+        "firstName": "John",
+        "lastName": "Doe"
+      },
+      "email": "john@example.com"
+    }
+  }'
+```
+
+Response (same for both Google and Apple):
 ```json
 {
-  "message": "Successfully signed in with Google",
+  "message": "Successfully signed in with google",
+  "provider": "google",
   "user": {
     "id": "user_id",
-    "email": "john@example.com",
+    "email": "john@example.com", 
     "name": "John Doe",
     "image": "https://lh3.googleusercontent.com/...",
     "emailVerified": true,
@@ -249,47 +298,127 @@ This script tests:
 
 ## Mobile App Integration
 
-### Authentication Flow
+### OAuth Authentication Flow
 
-1. **Register/Sign In**: Use `/auth/sign-up` or `/auth/sign-in` to get a session token
-2. **Store Token**: Save the token securely in your mobile app (e.g., Keychain/Keystore)
-3. **API Calls**: Include the token in the `Authorization: Bearer TOKEN` header for protected endpoints
-4. **Token Management**: Monitor token expiration and refresh as needed
+This backend supports unified OAuth authentication with **Google Sign In** and **Apple Sign In**. The mobile integration follows this flow:
 
-### Example Integration (React Native)
+1. **Configure OAuth Providers**: Set up Google and Apple Sign In in your mobile app
+2. **Authenticate**: Get ID token from Google/Apple SDK
+3. **Backend Verification**: Send ID token to backend for verification and session creation
+4. **Store Session**: Save the session token securely in your mobile app
+5. **API Calls**: Include the token in the `Authorization: Bearer TOKEN` header for protected endpoints
+
+### Supported Providers
+
+- ✅ **Google Sign In** - Cross-platform support (iOS & Android)
+- 🍎 **Apple Sign In** - iOS support (required for App Store)
+
+### Quick Setup
+
+#### 1. Google Sign In Setup
+```bash
+npm install @react-native-google-signin/google-signin
+```
+
+#### 2. Apple Sign In Setup (iOS only)
+```bash
+npm install @invertase/react-native-apple-authentication
+```
+
+#### 3. Implementation Example
 
 ```javascript
-// Sign in
-const signIn = async (email, password) => {
-  const response = await fetch('http://localhost:3000/auth/sign-in', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  
-  const data = await response.json();
-  if (data.token) {
-    // Store token securely
-    await AsyncStorage.setItem('auth_token', data.token);
-    return data.user;
+import { signInWithGoogle, signInWithApple } from './auth-helpers';
+
+// Google Sign In
+const handleGoogleSignIn = async () => {
+  try {
+    const user = await signInWithGoogle();
+    console.log('Signed in with Google:', user);
+  } catch (error) {
+    console.error('Google Sign In failed:', error);
   }
-  throw new Error(data.error);
+};
+
+// Apple Sign In (iOS only)
+const handleAppleSignIn = async () => {
+  try {
+    const user = await signInWithApple();
+    console.log('Signed in with Apple:', user);
+  } catch (error) {
+    console.error('Apple Sign In failed:', error);
+  }
+};
+```
+
+### Complete Integration Examples
+
+For complete React Native integration examples with Google and Apple Sign In, see:
+📁 [`examples/mobile-oauth-integration.ts`](examples/mobile-oauth-integration.ts)
+
+This file includes:
+- Complete Google Sign In setup and implementation
+- Complete Apple Sign In setup and implementation
+- Error handling and edge cases
+- Token storage and management
+- Platform-specific considerations
+
+### API Helper Functions
+
+```javascript
+// Store authentication token
+const storeAuthToken = async (token) => {
+  await AsyncStorage.setItem('auth_token', token);
+};
+
+// Get stored token
+const getAuthToken = async () => {
+  return await AsyncStorage.getItem('auth_token');
 };
 
 // Make authenticated API call
-const getProfile = async () => {
-  const token = await AsyncStorage.getItem('auth_token');
-  const response = await fetch('http://localhost:3000/api/profile', {
+const authenticatedFetch = async (url, options = {}) => {
+  const token = await getAuthToken();
+  return fetch(url, {
+    ...options,
     headers: {
+      ...options.headers,
       'Authorization': `Bearer ${token}`,
     },
   });
-  
+};
+
+// Example: Get user profile
+const getProfile = async () => {
+  const response = await authenticatedFetch('http://localhost:3000/api/profile');
+  return response.json();
+};
+
+// Example: Update profile
+const updateProfile = async (profileData) => {
+  const response = await authenticatedFetch('http://localhost:3000/api/profile', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(profileData),
+  });
   return response.json();
 };
 ```
+
+### OAuth Testing
+
+Test your OAuth integration using the provided script:
+```bash
+./scripts/test-oauth.sh
+```
+
+This script tests:
+- Provider listing
+- Google OAuth simulation
+- Apple OAuth simulation
+- Error handling scenarios
 
 ## Database Schema
 
