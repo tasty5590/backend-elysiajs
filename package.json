@@ -14,6 +14,7 @@
     "better-auth": "^1.2.8",
     "drizzle-orm": "^0.44.1",
     "elysia": "latest",
+    "google-auth-library": "^9.15.1",
     "postgres": "^3.4.7"
   },
   "devDependencies": {

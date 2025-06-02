@@ -1,11 +1,11 @@
-# Backend API with Authentication
+# Backend API with Google Authentication
 
-A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed for mobile app integration.
+A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed for mobile app integration with Google Sign In authentication.
 
 ## Features
 
 - 🚀 **ElysiaJS** - Fast and modern web framework
-- 🔐 **Better-Auth** - Comprehensive authentication system
+- 🔐 **Google Sign In** - OAuth authentication with Google
 - 🗄️ **Drizzle ORM** - Type-safe database operations with PostgreSQL
 - 📱 **Mobile-Ready** - CORS configured for mobile app integration
 - 🛡️ **Protected Routes** - Session-based authentication middleware
@@ -18,6 +18,7 @@ A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed
 
 - [Bun](https://bun.sh/) (latest version)
 - PostgreSQL database
+- Google OAuth credentials (Client ID and Client Secret)
 - Node.js 18+ (for compatibility)
 
 ### Installation
@@ -29,13 +30,28 @@ cd backend
 bun install
 ```
 
-2. **Set up environment variables:**
+2. **Set up Google OAuth:**
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing one
+   - Enable the Google+ API
+   - Create OAuth 2.0 credentials
+   - Add your domain to authorized origins
+
+3. **Set up environment variables:**
 ```bash
 cp .env.example .env
-# Edit .env with your database URL and auth secret
+# Edit .env with your database URL, auth secret, and Google OAuth credentials
 ```
 
-3. **Set up the database:**
+Required environment variables:
+```bash
+DATABASE_URL=postgresql://username:password@localhost:5432/backend_db
+AUTH_SECRET=your-super-secret-key-change-in-production-minimum-32-characters
+GOOGLE_CLIENT_ID=your-google-client-id.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+4. **Set up the database:**
 ```bash
 # Generate migrations
 bun run db:generate
@@ -47,7 +63,7 @@ bun run db:migrate
 bun run db:studio
 ```
 
-4. **Start the development server:**
+5. **Start the development server:**
 ```bash
 bun run dev
 ```
@@ -81,49 +97,33 @@ Database connectivity check
 
 ### Authentication Endpoints
 
-#### POST /auth/sign-up
-Register a new user
+#### POST /auth/google
+Authenticate with Google ID token
 ```bash
-curl -X POST http://localhost:3000/auth/sign-up \
+curl -X POST http://localhost:3000/auth/google \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "password": "securepassword123"
+    "idToken": "google-id-token-from-mobile-app"
   }'
 ```
 
 Response:
 ```json
 {
-  "message": "Account created successfully",
+  "message": "Successfully signed in with Google",
   "user": {
     "id": "user_id",
     "email": "john@example.com",
     "name": "John Doe",
-    "emailVerified": false,
+    "image": "https://lh3.googleusercontent.com/...",
+    "emailVerified": true,
     "createdAt": "2025-06-02T18:00:00.000Z"
+  },
+  "token": "session_token_here",
+  "session": {
+    "id": "session_id",
+    "expiresAt": "2025-06-09T18:00:00.000Z"
   }
-}
-```
-
-#### POST /auth/sign-in
-Sign in user
-```bash
-curl -X POST http://localhost:3000/auth/sign-in \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "john@example.com",
-    "password": "securepassword123"
-  }'
-```
-
-Response:
-```json
-{
-  "message": "Signed in successfully",
-  "user": { /* user object */ },
-  "token": "session_token_here"
 }
 ```
 

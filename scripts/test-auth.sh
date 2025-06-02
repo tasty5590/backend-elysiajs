@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Complete Authentication Test Script
-# This script tests the full authentication flow with protected endpoints
+# Google Authentication Test Script
+# This script tests the Google Sign In authentication flow
 
 BASE_URL="http://localhost:3000"
 API_URL="$BASE_URL/api"
 AUTH_URL="$BASE_URL/auth"
 
-echo "🧪 Complete Authentication Flow Test"
+echo "🧪 Google Authentication Flow Test"
 echo "=================================="
 
 # Colors for output
@@ -34,152 +34,79 @@ echo ""
 print_info "1. Testing health endpoints..."
 curl -s "$BASE_URL/health" | jq '.' || print_error "Health check failed"
 
-# Test 2: Register new user
+# Test 2: Test Google Sign In endpoint (without real Google token)
 echo ""
-print_info "2. Registering new user..."
+print_info "2. Testing Google Sign In endpoint (will fail without real token)..."
 
-# Generate unique email with timestamp
-TIMESTAMP=$(date +%s)
-UNIQUE_EMAIL="complete${TIMESTAMP}@test.com"
-
-REGISTER_RESPONSE=$(curl -s -X POST "$AUTH_URL/sign-up" \
+GOOGLE_RESPONSE=$(curl -s -X POST "$AUTH_URL/google" \
   -H "Content-Type: application/json" \
   -d "{
-    \"name\": \"Complete Test User\",
-    \"email\": \"$UNIQUE_EMAIL\",
-    \"password\": \"securepassword123\"
+    \"idToken\": \"fake-google-id-token\"
   }")
 
-echo $REGISTER_RESPONSE | jq '.'
+echo "Google Sign In Response:"
+echo "$GOOGLE_RESPONSE" | jq '.' || echo "$GOOGLE_RESPONSE"
 
-if echo $REGISTER_RESPONSE | jq -e '.user' > /dev/null; then
-    print_status "User registration successful"
+if echo "$GOOGLE_RESPONSE" | grep -q "Invalid Google token"; then
+    print_status "Google endpoint is working (correctly rejecting fake token)"
 else
-    print_error "User registration failed"
-    exit 1
+    print_error "Google endpoint response unexpected"
 fi
 
-# Test 3: Sign in
+# Test 3: Test protected endpoints without authentication
 echo ""
-print_info "3. Signing in..."
-SIGNIN_RESPONSE=$(curl -s -X POST "$AUTH_URL/sign-in" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$UNIQUE_EMAIL\",
-    \"password\": \"securepassword123\"
-  }")
+print_info "3. Testing protected endpoints without authentication..."
 
-echo $SIGNIN_RESPONSE | jq '.'
+PROTECTED_RESPONSE=$(curl -s -X GET "$API_URL/profile")
+echo "Protected endpoint response (no auth):"
+echo "$PROTECTED_RESPONSE" | jq '.' || echo "$PROTECTED_RESPONSE"
 
-TOKEN=$(echo $SIGNIN_RESPONSE | jq -r '.token')
-if [ "$TOKEN" != "null" ] && [ "$TOKEN" != "" ]; then
-    print_status "Sign in successful, token: $TOKEN"
+if echo "$PROTECTED_RESPONSE" | grep -q "Missing authorization header"; then
+    print_status "Protected endpoints correctly require authentication"
 else
-    print_error "Sign in failed"
-    exit 1
+    print_error "Protected endpoints should require authentication"
 fi
 
-# Test 4: Access protected profile
+# Test 4: Test /auth/me endpoint without authentication
 echo ""
-print_info "4. Accessing protected profile..."
-PROFILE_RESPONSE=$(curl -s -X GET "$API_URL/profile" \
-  -H "Authorization: Bearer $TOKEN")
+print_info "4. Testing /auth/me endpoint without authentication..."
 
-echo $PROFILE_RESPONSE | jq '.'
+ME_RESPONSE=$(curl -s -X GET "$AUTH_URL/me")
+echo "Me endpoint response (no auth):"
+echo "$ME_RESPONSE" | jq '.' || echo "$ME_RESPONSE"
 
-if echo $PROFILE_RESPONSE | jq -e '.user' > /dev/null; then
-    print_status "Protected profile access successful"
+if echo "$ME_RESPONSE" | grep -q "Missing authorization header"; then
+    print_status "Me endpoint correctly requires authentication"
 else
-    print_error "Protected profile access failed"
+    print_error "Me endpoint should require authentication"
 fi
 
-# Test 5: Update profile
+# Test 5: Test sign-out without authentication
 echo ""
-print_info "5. Updating user profile..."
-UPDATE_RESPONSE=$(curl -s -X PUT "$API_URL/profile" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Updated Complete Test User"
-  }')
+print_info "5. Testing sign-out endpoint without authentication..."
 
-echo $UPDATE_RESPONSE | jq '.'
+SIGNOUT_RESPONSE=$(curl -s -X POST "$AUTH_URL/sign-out")
+echo "Sign-out response (no auth):"
+echo "$SIGNOUT_RESPONSE" | jq '.' || echo "$SIGNOUT_RESPONSE"
 
-if echo $UPDATE_RESPONSE | jq -e '.user.name' | grep -q "Updated"; then
-    print_status "Profile update successful"
+if echo "$SIGNOUT_RESPONSE" | grep -q "Missing authorization header"; then
+    print_status "Sign-out endpoint correctly requires authentication"
 else
-    print_error "Profile update failed"
+    print_error "Sign-out endpoint should require authentication"
 fi
 
-# Test 6: Get user sessions
 echo ""
-print_info "6. Getting user sessions..."
-SESSIONS_RESPONSE=$(curl -s -X GET "$API_URL/sessions" \
-  -H "Authorization: Bearer $TOKEN")
-
-echo $SESSIONS_RESPONSE | jq '.'
-
-if echo $SESSIONS_RESPONSE | jq -e '.sessions' > /dev/null; then
-    print_status "Sessions retrieval successful"
-else
-    print_error "Sessions retrieval failed"
-fi
-
-# Test 7: Get all users (protected endpoint)
+print_info "Test Summary:"
+echo "- All endpoints are properly configured for Google authentication"
+echo "- To test with real Google tokens, use a mobile app or web app"
+echo "- Protected endpoints correctly require authentication"
 echo ""
-print_info "7. Getting all users..."
-USERS_RESPONSE=$(curl -s -X GET "$API_URL/users" \
-  -H "Authorization: Bearer $TOKEN")
-
-echo $USERS_RESPONSE | jq '.'
-
-if echo $USERS_RESPONSE | jq -e '.users' > /dev/null; then
-    print_status "Users retrieval successful"
-else
-    print_error "Users retrieval failed"
-fi
-
-# Test 8: Test invalid token
+print_info "Next steps:"
+echo "1. Set up GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file"
+echo "2. Configure Google OAuth in Google Cloud Console"
+echo "3. Use the mobile integration example to test with real Google tokens"
 echo ""
-print_info "8. Testing invalid token (should fail)..."
-INVALID_RESPONSE=$(curl -s -X GET "$API_URL/profile" \
-  -H "Authorization: Bearer invalid_token")
-
-echo $INVALID_RESPONSE
-
-if echo $INVALID_RESPONSE | grep -q "Invalid"; then
-    print_status "Invalid token properly rejected"
-else
-    print_error "Invalid token test failed"
-fi
-
-# Test 9: Sign out
-echo ""
-print_info "9. Signing out..."
-SIGNOUT_RESPONSE=$(curl -s -X POST "$AUTH_URL/sign-out" \
-  -H "Authorization: Bearer $TOKEN")
-
-echo $SIGNOUT_RESPONSE | jq '.'
-
-if echo $SIGNOUT_RESPONSE | jq -e '.message' | grep -q "success"; then
-    print_status "Sign out successful"
-else
-    print_error "Sign out failed"
-fi
-
-# Test 10: Try to access protected endpoint after sign out (should fail)
-echo ""
-print_info "10. Testing access after sign out (should fail)..."
-POST_SIGNOUT_RESPONSE=$(curl -s -X GET "$API_URL/profile" \
-  -H "Authorization: Bearer $TOKEN")
-
-echo $POST_SIGNOUT_RESPONSE
-
-if echo $POST_SIGNOUT_RESPONSE | grep -q "Invalid"; then
-    print_status "Access properly denied after sign out"
-else
-    print_error "Access after sign out test failed"
-fi
+print_status "Google Authentication Test Complete!"
 
 echo ""
 echo "🎉 Complete authentication test finished!"

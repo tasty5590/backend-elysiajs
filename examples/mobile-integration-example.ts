@@ -1,11 +1,16 @@
 /**
- * Mobile App Integration Example (React Native)
+ * Mobile App Integration Example (React Native with Google Sign In)
  * 
  * This file demonstrates how to integrate with the authentication backend
- * from a React Native mobile application.
+ * from a React Native mobile application using Google Sign In.
+ * 
+ * Required packages:
+ * - @react-native-async-storage/async-storage
+ * - @react-native-google-signin/google-signin
+ * 
+ * Installation:
+ * npm install @react-native-async-storage/async-storage @react-native-google-signin/google-signin
  */
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuration
 const API_BASE_URL = 'http://localhost:3000'; // Change to your production URL
@@ -13,303 +18,154 @@ const AUTH_TOKEN_KEY = 'auth_token';
 
 /**
  * Authentication Service
+ * 
+ * Example usage in React Native:
+ * 
+ * // Configure Google Sign In in your App.tsx
+ * import { GoogleSignin } from '@react-native-google-signin/google-signin';
+ * 
+ * GoogleSignin.configure({
+ *   webClientId: 'your-google-client-id.googleusercontent.com',
+ *   offlineAccess: true,
+ * });
+ * 
+ * // Sign in with Google
+ * const handleGoogleSignIn = async () => {
+ *   try {
+ *     await GoogleSignin.hasPlayServices();
+ *     const userInfo = await GoogleSignin.signIn();
+ *     const idToken = userInfo.idToken;
+ *     
+ *     // Send to backend
+ *     const response = await fetch('http://localhost:3000/auth/google', {
+ *       method: 'POST',
+ *       headers: { 'Content-Type': 'application/json' },
+ *       body: JSON.stringify({ idToken }),
+ *     });
+ *     
+ *     const data = await response.json();
+ *     
+ *     // Store session token
+ *     await AsyncStorage.setItem('auth_token', data.token);
+ *     
+ *     return data.user;
+ *   } catch (error) {
+ *     console.error('Google Sign In error:', error);
+ *     throw error;
+ *   }
+ * };
+ * 
+ * // Sign out
+ * const handleSignOut = async () => {
+ *   try {
+ *     const token = await AsyncStorage.getItem('auth_token');
+ *     
+ *     if (token) {
+ *       await fetch('http://localhost:3000/auth/sign-out', {
+ *         method: 'POST',
+ *         headers: { 'Authorization': `Bearer ${token}` },
+ *       });
+ *     }
+ *     
+ *     await AsyncStorage.removeItem('auth_token');
+ *     await GoogleSignin.signOut();
+ *   } catch (error) {
+ *     console.error('Sign out error:', error);
+ *   }
+ * };
+ * 
+ * // Get current user
+ * const getCurrentUser = async () => {
+ *   try {
+ *     const token = await AsyncStorage.getItem('auth_token');
+ *     
+ *     if (!token) return null;
+ *     
+ *     const response = await fetch('http://localhost:3000/auth/me', {
+ *       headers: { 'Authorization': `Bearer ${token}` },
+ *     });
+ *     
+ *     if (!response.ok) {
+ *       if (response.status === 401) {
+ *         await AsyncStorage.removeItem('auth_token');
+ *       }
+ *       return null;
+ *     }
+ *     
+ *     const data = await response.json();
+ *     return data.user;
+ *   } catch (error) {
+ *     console.error('Get current user error:', error);
+ *     return null;
+ *   }
+ * };
+ * 
+ * // Make authenticated API calls
+ * const makeAuthenticatedRequest = async (endpoint: string, options = {}) => {
+ *   const token = await AsyncStorage.getItem('auth_token');
+ *   
+ *   const response = await fetch(`http://localhost:3000${endpoint}`, {
+ *     ...options,
+ *     headers: {
+ *       'Content-Type': 'application/json',
+ *       ...(token && { 'Authorization': `Bearer ${token}` }),
+ *       ...options.headers,
+ *     },
+ *   });
+ *   
+ *   if (response.status === 401) {
+ *     await AsyncStorage.removeItem('auth_token');
+ *     throw new Error('Session expired. Please sign in again.');
+ *   }
+ *   
+ *   return response;
+ * };
  */
-class AuthService {
 
-    /**
-     * Register a new user
-     */
-    static async signUp(name: string, email: string, password: string) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/auth/sign-up`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ name, email, password }),
-            });
+export const MobileIntegrationGuide = {
+    // Available endpoints
+    endpoints: {
+        googleSignIn: 'POST /auth/google',
+        signOut: 'POST /auth/sign-out',
+        getCurrentUser: 'GET /auth/me',
+        getProfile: 'GET /api/profile',
+        getUsers: 'GET /api/users',
+        updateProfile: 'PUT /api/profile',
+    },
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Registration failed');
-            }
-
-            return data.user;
-        } catch (error) {
-            console.error('SignUp error:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Sign in user and store token
-     */
-    static async signIn(email: string, password: string) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/auth/sign-in`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, password }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Sign in failed');
-            }
-
-            // Store token securely
-            await AsyncStorage.setItem(AUTH_TOKEN_KEY, data.token);
-
-            return data.user;
-        } catch (error) {
-            console.error('SignIn error:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Sign out user and remove token
-     */
-    static async signOut() {
-        try {
-            const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-
-            if (token) {
-                const response = await fetch(`${API_BASE_URL}/auth/sign-out`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                });
-
-                if (!response.ok) {
-                    console.warn('Server sign-out failed, clearing local token anyway');
-                }
-            }
-
-            // Always clear local token
-            await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-        } catch (error) {
-            console.error('SignOut error:', error);
-            // Still clear local token even if server call fails
-            await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-        }
-    }
-
-    /**
-     * Get stored auth token
-     */
-    static async getToken(): Promise<string | null> {
-        try {
-            return await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-        } catch (error) {
-            console.error('Error getting token:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Check if user is signed in
-     */
-    static async isSignedIn(): Promise<boolean> {
-        const token = await this.getToken();
-        return token !== null;
-    }
-}
-
-/**
- * API Service for authenticated requests
- */
-class ApiService {
-
-    /**
-     * Get authentication headers
-     */
-    static async getAuthHeaders() {
-        const token = await AuthService.getToken();
-        return {
+    // Required request format for Google Sign In
+    googleSignInRequest: {
+        method: 'POST',
+        url: '/auth/google',
+        headers: {
             'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` }),
-        };
-    }
+        },
+        body: {
+            idToken: 'string (Google ID token from @react-native-google-signin/google-signin)',
+        },
+    },
 
-    /**
-     * Make authenticated API request
-     */
-    static async request(endpoint: string, options: RequestInit = {}) {
-        try {
-            const headers = await this.getAuthHeaders();
+    // Expected response format
+    googleSignInResponse: {
+        message: 'Successfully signed in with Google',
+        user: {
+            id: 'string',
+            email: 'string',
+            name: 'string',
+            image: 'string',
+            emailVerified: 'boolean',
+            createdAt: 'string',
+            updatedAt: 'string',
+        },
+        token: 'string (store this securely)',
+        session: {
+            id: 'string',
+            expiresAt: 'string',
+        },
+    },
 
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                ...options,
-                headers: {
-                    ...headers,
-                    ...options.headers,
-                },
-            });
-
-            if (response.status === 401) {
-                // Token expired or invalid, sign out user
-                await AuthService.signOut();
-                throw new Error('Authentication expired. Please sign in again.');
-            }
-
-            return response;
-        } catch (error) {
-            console.error('API request error:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Get current user profile
-     */
-    static async getProfile() {
-        const response = await this.request('/api/profile');
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to get profile');
-        }
-
-        return data;
-    }
-
-    /**
-     * Update user profile
-     */
-    static async updateProfile(updates: { name?: string; email?: string }) {
-        const response = await this.request('/api/profile', {
-            method: 'PUT',
-            body: JSON.stringify(updates),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to update profile');
-        }
-
-        return data;
-    }
-
-    /**
-     * Get user's active sessions
-     */
-    static async getSessions() {
-        const response = await this.request('/api/sessions');
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to get sessions');
-        }
-
-        return data;
-    }
-
-    /**
-     * Revoke a specific session
-     */
-    static async revokeSession(sessionId: string) {
-        const response = await this.request(`/api/sessions/${sessionId}`, {
-            method: 'DELETE',
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to revoke session');
-        }
-
-        return data;
-    }
-
-    /**
-     * Revoke all other sessions
-     */
-    static async revokeAllOtherSessions() {
-        const response = await this.request('/api/sessions/revoke-all', {
-            method: 'POST',
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to revoke sessions');
-        }
-
-        return data;
-    }
-}
-
-/**
- * Example React Native component usage
- */
-
-// Login component example
-const LoginScreen = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleSignIn = async () => {
-        if (!email || !password) {
-            Alert.alert('Error', 'Please fill in all fields');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const user = await AuthService.signIn(email, password);
-            console.log('Signed in user:', user);
-            // Navigate to main app
-        } catch (error) {
-            Alert.alert('Sign In Failed', error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // ... rest of component
+    // Authentication header format for protected endpoints
+    authenticationHeader: {
+        Authorization: 'Bearer <session_token>',
+    },
 };
-
-// Profile component example
-const ProfileScreen = () => {
-    const [profile, setProfile] = useState(null);
-    const [sessions, setSessions] = useState([]);
-
-    useEffect(() => {
-        loadProfileData();
-    }, []);
-
-    const loadProfileData = async () => {
-        try {
-            const [profileData, sessionsData] = await Promise.all([
-                ApiService.getProfile(),
-                ApiService.getSessions(),
-            ]);
-
-            setProfile(profileData.user);
-            setSessions(sessionsData.sessions);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to load profile data');
-        }
-    };
-
-    const handleSignOut = async () => {
-        try {
-            await AuthService.signOut();
-            // Navigate to login screen
-        } catch (error) {
-            Alert.alert('Error', 'Sign out failed');
-        }
-    };
-
-    // ... rest of component
-};
-
-export { AuthService, ApiService };

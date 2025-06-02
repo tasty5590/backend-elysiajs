@@ -13,9 +13,11 @@ export const auth = betterAuth({
             verification: schema.verification,
         },
     }),
-    emailAndPassword: {
-        enabled: true,
-        requireEmailVerification: false, // Set to true in production
+    socialProviders: {
+        google: {
+            clientId: process.env.GOOGLE_CLIENT_ID!,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        },
     },
     session: {
         expiresIn: 60 * 60 * 24 * 7, // 7 days

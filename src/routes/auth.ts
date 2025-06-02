@@ -1,85 +1,153 @@
 import { Elysia, t } from "elysia";
-import { auth } from "../auth";
+import { OAuth2Client } from "google-auth-library";
+import { db } from "../db/client";
+import { user, session, account } from "../db/schema/auth";
+import { eq, and, gt } from "drizzle-orm";
+import { generateSessionToken, generateId } from "../utils/auth";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
-    // Register new user
-    .post("/sign-up", async ({ body, set }) => {
+    // Google Sign In - handles both sign up and sign in
+    .post("/google", async ({ body, set, request }) => {
         try {
-            const request = new Request('http://localhost:3000/api/auth/sign-up/email', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email: body.email,
-                    password: body.password,
-                    name: body.name,
-                })
+            const { idToken } = body;
+
+            // Verify the Google ID token
+            const ticket = await googleClient.verifyIdToken({
+                idToken,
+                audience: process.env.GOOGLE_CLIENT_ID,
             });
 
-            const response = await auth.handler(request);
-            const result = await response.json();
-
-            if (!response.ok) {
+            const payload = ticket.getPayload();
+            if (!payload) {
                 set.status = 400;
-                return { error: result.error || "Failed to create account" };
+                return { error: "Invalid Google token" };
             }
 
+            const googleUserId = payload.sub;
+            const email = payload.email;
+            const name = payload.name;
+            const picture = payload.picture;
+
+            if (!email || !googleUserId || !name) {
+                set.status = 400;
+                return { error: "Missing required Google user data" };
+            }
+
+            // Check if user already exists
+            const existingUsers = await db
+                .select()
+                .from(user)
+                .where(eq(user.email, email))
+                .limit(1);
+
+            let currentUser;
+
+            if (existingUsers.length === 0) {
+                // Create new user
+                const newUsers = await db
+                    .insert(user)
+                    .values({
+                        id: generateId("user"),
+                        email,
+                        name,
+                        image: picture,
+                        emailVerified: true, // Google emails are verified
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    })
+                    .returning();
+
+                currentUser = newUsers[0];
+
+                // Create account record for Google
+                await db
+                    .insert(account)
+                    .values({
+                        id: generateId("account"),
+                        userId: currentUser.id,
+                        accountId: googleUserId,
+                        providerId: "google",
+                        accessToken: null,
+                        refreshToken: null,
+                        idToken: null,
+                        expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    });
+            } else {
+                currentUser = existingUsers[0];
+
+                // Update user info from Google (in case name/picture changed)
+                const updatedUsers = await db
+                    .update(user)
+                    .set({
+                        name,
+                        image: picture,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(user.id, currentUser.id))
+                    .returning();
+
+                currentUser = updatedUsers[0];
+            }
+
+            // Clean up any existing sessions for this user (optional, for single-session policy)
+            await db
+                .delete(session)
+                .where(eq(session.userId, currentUser.id));
+
+            // Create new session
+            const sessionToken = generateSessionToken();
+            const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+            const userAgent = request.headers.get("user-agent") || "";
+            const ipAddress = request.headers.get("x-forwarded-for") ||
+                request.headers.get("x-real-ip") ||
+                "unknown";
+
+            const newSessions = await db
+                .insert(session)
+                .values({
+                    id: generateId("session"),
+                    token: sessionToken,
+                    userId: currentUser.id,
+                    expiresAt,
+                    ipAddress,
+                    userAgent,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .returning();
+
             return {
-                message: "Account created successfully",
-                user: result.user
+                message: "Successfully signed in with Google",
+                user: {
+                    id: currentUser.id,
+                    email: currentUser.email,
+                    name: currentUser.name,
+                    image: currentUser.image,
+                    emailVerified: currentUser.emailVerified,
+                    createdAt: currentUser.createdAt,
+                    updatedAt: currentUser.updatedAt,
+                },
+                token: sessionToken,
+                session: {
+                    id: newSessions[0].id,
+                    expiresAt: newSessions[0].expiresAt,
+                },
             };
         } catch (error) {
+            console.error("Google Sign In error:", error);
             set.status = 400;
             return {
-                error: error instanceof Error ? error.message : "Registration failed"
+                error: error instanceof Error ? error.message : "Google Sign In failed"
             };
         }
     }, {
         body: t.Object({
-            email: t.String({ format: "email" }),
-            password: t.String({ minLength: 6 }),
-            name: t.String({ minLength: 1 }),
-        })
-    })
-
-    // Sign in user
-    .post("/sign-in", async ({ body, set }) => {
-        try {
-            const request = new Request('http://localhost:3000/api/auth/sign-in/email', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email: body.email,
-                    password: body.password,
-                })
-            });
-
-            const response = await auth.handler(request);
-            const result = await response.json();
-
-            if (!response.ok) {
-                set.status = 401;
-                return { error: result.error || "Invalid credentials" };
-            }
-
-            return {
-                message: "Signed in successfully",
-                user: result.user,
-                token: result.token
-            };
-        } catch (error) {
-            set.status = 401;
-            return {
-                error: error instanceof Error ? error.message : "Sign in failed"
-            };
-        }
-    }, {
-        body: t.Object({
-            email: t.String({ format: "email" }),
-            password: t.String(),
+            idToken: t.String({ minLength: 1 }),
         })
     })
 
@@ -95,27 +163,23 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
             const token = authHeader.replace('Bearer ', '');
 
-            // Import db and session schema
-            const { db } = await import("../db/client");
-            const { session } = await import("../db/schema");
-            const { eq } = await import("drizzle-orm");
-
-            // Delete the session directly from database
-            const deletedSession = await db
+            // Delete the session from database
+            const deletedSessions = await db
                 .delete(session)
                 .where(eq(session.token, token))
                 .returning();
 
-            if (!deletedSession.length) {
+            if (!deletedSessions.length) {
                 set.status = 404;
                 return { error: "Session not found" };
             }
 
             return {
                 message: "Signed out successfully",
-                sessionId: deletedSession[0].id
+                sessionId: deletedSessions[0].id
             };
         } catch (error) {
+            console.error("Sign out error:", error);
             set.status = 400;
             return {
                 error: error instanceof Error ? error.message : "Sign out failed"
@@ -135,12 +199,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
             const token = authHeader.replace('Bearer ', '');
 
-            // Import db and session schema  
-            const { db } = await import("../db/client");
-            const { session, user } = await import("../db/schema");
-            const { eq, and, gt } = await import("drizzle-orm");
-
-            // Query the session directly from the database
+            // Query the session and user data
             const sessionData = await db
                 .select({
                     user: {
@@ -181,6 +240,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
                 session: sessionData[0].session
             };
         } catch (error) {
+            console.error("Get user error:", error);
             set.status = 401;
             return {
                 error: error instanceof Error ? error.message : "Failed to get user"
