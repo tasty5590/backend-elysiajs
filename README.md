@@ -63,7 +63,6 @@ GOOGLE_CLIENT_ID=your-google-client-id.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 APPLE_CLIENT_ID=your.apple.bundle.id
 APPLE_CLIENT_SECRET=your-apple-client-secret-or-private-key
-GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
 4. **Set up the database:**
