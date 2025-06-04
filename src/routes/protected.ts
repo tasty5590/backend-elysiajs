@@ -4,7 +4,6 @@ import { authMiddleware } from "../middleware/auth";
 export const protectedRoutes = new Elysia({ prefix: "/v1" })
     .derive(authMiddleware)
 
-    // Protected profile endpoint
     .get("/profile", async ({ user, session }) => {
         return {
             message: "This is a protected endpoint",
