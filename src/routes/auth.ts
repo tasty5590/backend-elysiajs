@@ -1,13 +1,11 @@
-// filepath: /Users/michelebroggi/Desktop/backend/src/routes/auth.ts
 import { Elysia, t } from "elysia";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { user, session, account } from "../db/schema/auth";
-import { eq, and, gt } from "drizzle-orm";
-import { generateSessionToken, generateId } from "../utils/auth";
+import { generateSessionToken, generateId, extractAuthToken } from "../utils/auth";
 import { verifyOAuthToken, isProviderSupported, getSupportedProviders } from "../utils/oauth-providers";
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
-    // Dynamic OAuth provider endpoint - handles both sign up and sign in for any supported provider
     .post("/:provider", async ({ body, set, request, params }) => {
         try {
             const { idToken, user: userInfo } = body;
@@ -176,33 +174,21 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         })
     })
 
-    // Get supported providers
-    .get("/providers", () => {
-        return {
-            providers: getSupportedProviders(),
-            endpoints: getSupportedProviders().reduce((acc, provider) => {
-                acc[provider] = `POST /auth/${provider}`;
-                return acc;
-            }, {} as Record<string, string>)
-        };
-    })
-
-    // Sign out user
     .post("/sign-out", async ({ headers, set }) => {
         try {
             const authHeader = headers.authorization;
 
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            // Extract and validate auth token
+            const tokenResult = extractAuthToken(authHeader);
+            if (!tokenResult.success || !tokenResult.token) {
                 set.status = 401;
-                return { error: "Missing authorization header" };
+                return { error: tokenResult.error || "Missing authorization header" };
             }
-
-            const token = authHeader.replace('Bearer ', '');
 
             // Delete the session from database
             const deletedSessions = await db
                 .delete(session)
-                .where(eq(session.token, token))
+                .where(eq(session.token, tokenResult.token))
                 .returning();
 
             if (!deletedSessions.length) {
@@ -219,67 +205,6 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
             set.status = 400;
             return {
                 error: error instanceof Error ? error.message : "Sign out failed"
-            };
-        }
-    })
-
-    // Get current user
-    .get("/me", async ({ headers, set }) => {
-        try {
-            const authHeader = headers.authorization;
-
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                set.status = 401;
-                return { error: "Missing authorization header" };
-            }
-
-            const token = authHeader.replace('Bearer ', '');
-
-            // Query the session and user data
-            const sessionData = await db
-                .select({
-                    user: {
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                        emailVerified: user.emailVerified,
-                        image: user.image,
-                        createdAt: user.createdAt,
-                        updatedAt: user.updatedAt,
-                    },
-                    session: {
-                        id: session.id,
-                        token: session.token,
-                        expiresAt: session.expiresAt,
-                        createdAt: session.createdAt,
-                        ipAddress: session.ipAddress,
-                        userAgent: session.userAgent,
-                    }
-                })
-                .from(session)
-                .leftJoin(user, eq(session.userId, user.id))
-                .where(
-                    and(
-                        eq(session.token, token),
-                        gt(session.expiresAt, new Date())
-                    )
-                )
-                .limit(1);
-
-            if (!sessionData.length || !sessionData[0].user) {
-                set.status = 401;
-                return { error: "Invalid or expired session" };
-            }
-
-            return {
-                user: sessionData[0].user,
-                session: sessionData[0].session
-            };
-        } catch (error) {
-            console.error("Get user error:", error);
-            set.status = 401;
-            return {
-                error: error instanceof Error ? error.message : "Failed to get user"
             };
         }
     });
