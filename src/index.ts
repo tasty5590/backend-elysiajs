@@ -2,11 +2,11 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { cron } from "@elysiajs/cron";
 import { db, closeConnection } from "./db/client";
-import { user, session } from "./db/schema";
+import { user } from "./db/schema";
 import { auth } from "./auth";
 import { authRoutes } from "./routes/auth";
 import { protectedRoutes } from "./routes/protected";
-import { cleanupExpiredSessions, getSessionStats } from "./utils/session-cleanup";
+import { cleanupExpiredSessions } from "./utils/session-cleanup";
 
 const app = new Elysia()
   .use(cors({
@@ -48,45 +48,9 @@ const app = new Elysia()
       };
     }
   })
-  .get("/debug/sessions", async () => {
-    try {
-      const sessions = await db.select().from(session).limit(5);
-      const users = await db.select().from(user).limit(5);
-      return {
-        sessions,
-        users,
-        count: { sessions: sessions.length, users: users.length }
-      };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : "Unknown error" };
-    }
-  })
-  .get("/debug/session-stats", async () => {
-    try {
-      return await getSessionStats();
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : "Unknown error" };
-    }
-  })
-  .post("/debug/cleanup-sessions", async () => {
-    try {
-      const result = await cleanupExpiredSessions();
-      return {
-        message: "Session cleanup completed",
-        ...result
-      };
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : "Unknown error",
-        message: "Session cleanup failed"
-      };
-    }
-  })
   // Mount better-auth API routes
   .all("/api/auth/*", ({ request }) => auth.handler(request))
-  // Mount custom auth routes
   .use(authRoutes)
-  // Mount protected routes
   .use(protectedRoutes)
   .listen(3000);
 
