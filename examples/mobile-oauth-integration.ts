@@ -184,7 +184,7 @@ export const getCurrentUser = async () => {
         const token = await AsyncStorage.getItem('auth_token');
         if (!token) return null;
 
-        const response = await fetch('http://localhost:3000/auth/me', {
+        const response = await fetch('http://localhost:3000/v1/profile', {
             headers: {
                 'Authorization': `Bearer ${token}`,
             },
@@ -396,19 +396,10 @@ Available Endpoints:
    Body: { idToken: "google_id_token" }
    Returns: { message, user, token, session }
 
-5. GET /auth/me
-   Headers: { Authorization: "Bearer TOKEN" }
-   Returns: { user, session }
-
-6. POST /auth/sign-out
+5. POST /auth/sign-out
    Headers: { Authorization: "Bearer TOKEN" }
    Returns: { message, sessionId }
 
 Protected API endpoints:
-- GET /api/profile
-- PUT /api/profile
-- GET /api/users
-- GET /api/sessions
-- DELETE /api/sessions/:sessionId
-- POST /api/sessions/revoke-all
+- GET /v1/profile (get user profile and session information)
 */

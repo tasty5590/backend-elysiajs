@@ -81,7 +81,7 @@ const AUTH_TOKEN_KEY = 'auth_token';
  *     
  *     if (!token) return null;
  *     
- *     const response = await fetch('http://localhost:3000/auth/me', {
+ *     const response = await fetch('http://localhost:3000/v1/profile', {
  *       headers: { 'Authorization': `Bearer ${token}` },
  *     });
  *     
@@ -126,11 +126,9 @@ export const MobileIntegrationGuide = {
     // Available endpoints
     endpoints: {
         googleSignIn: 'POST /auth/google',
+        appleSignIn: 'POST /auth/apple',
         signOut: 'POST /auth/sign-out',
-        getCurrentUser: 'GET /auth/me',
-        getProfile: 'GET /api/profile',
-        getUsers: 'GET /api/users',
-        updateProfile: 'PUT /api/profile',
+        getProfile: 'GET /v1/profile',
     },
 
     // Required request format for Google Sign In

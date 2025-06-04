@@ -11,7 +11,7 @@ A modern backend API built with ElysiaJS, Drizzle ORM, and better-auth, designed
 - 🗄️ **Drizzle ORM** - Type-safe database operations with PostgreSQL
 - 📱 **Mobile-Ready** - CORS configured for mobile app integration
 - 🛡️ **Protected Routes** - Session-based authentication middleware
-- 🔄 **Session Management** - Create, list, and revoke user sessions
+- 🔄 **Session Management** - Automatic session creation and cleanup
 - 🧹 **Automatic Cleanup** - ElysiaJS cron job for expired session cleanup
 - ✅ **Health Checks** - Monitor API and database health
 
@@ -111,22 +111,12 @@ Database connectivity check
 
 ### Authentication Endpoints
 
-#### GET /auth/providers
-Get supported OAuth providers
-```bash
-curl -X GET http://localhost:3000/auth/providers
-```
+#### Supported Providers
+The backend supports the following OAuth providers:
+- **Google Sign In**: `POST /auth/google`
+- **Apple Sign In**: `POST /auth/apple`
 
-Response:
-```json
-{
-  "providers": ["google", "apple"],
-  "endpoints": {
-    "google": "POST /auth/google",
-    "apple": "POST /auth/apple"
-  }
-}
-```
+Both endpoints follow the same authentication flow and return the same response format.
 
 #### POST /auth/google
 **Google Sign In endpoint**
@@ -183,62 +173,50 @@ curl -X POST http://localhost:3000/auth/sign-out \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-#### GET /auth/me
-Get current user information
-```bash
-curl -X GET http://localhost:3000/auth/me \
-  -H "Authorization: Bearer YOUR_TOKEN"
+Response:
+```json
+{
+  "message": "Signed out successfully",
+  "sessionId": "session_id"
+}
 ```
 
 ### Protected API Endpoints
 
 All protected endpoints require the `Authorization: Bearer TOKEN` header.
 
-#### GET /api/profile
-Get current user profile
+#### GET /v1/profile
+Get current user profile and session information
 ```bash
-curl -X GET http://localhost:3000/api/profile \
+curl -X GET http://localhost:3000/v1/profile \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-#### PUT /api/profile
-Update user profile
-```bash
-curl -X PUT http://localhost:3000/api/profile \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Updated Name",
-    "email": "new@example.com"
-  }'
-```
-
-#### GET /api/users
-Get all users (admin-like endpoint)
-```bash
-curl -X GET http://localhost:3000/api/users \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-#### GET /api/sessions
-Get user's active sessions
-```bash
-curl -X GET http://localhost:3000/api/sessions \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-#### DELETE /api/sessions/:sessionId
-Revoke a specific session
-```bash
-curl -X DELETE http://localhost:3000/api/sessions/SESSION_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-#### POST /api/sessions/revoke-all
-Revoke all other sessions (except current)
-```bash
-curl -X POST http://localhost:3000/api/sessions/revoke-all \
-  -H "Authorization: Bearer YOUR_TOKEN"
+Response:
+```json
+{
+  "message": "This is a protected endpoint",
+  "user": {
+    "id": "user_id",
+    "email": "john@example.com",
+    "name": "John Doe",
+    "image": "https://lh3.googleusercontent.com/...",
+    "emailVerified": true,
+    "createdAt": "2025-06-02T18:00:00.000Z",
+    "updatedAt": "2025-06-02T18:00:00.000Z"
+  },
+  "session": {
+    "id": "session_id",
+    "token": "session_token",
+    "userId": "user_id",
+    "expiresAt": "2025-06-09T18:00:00.000Z",
+    "ipAddress": "192.168.1.1",
+    "userAgent": "...",
+    "createdAt": "2025-06-02T18:00:00.000Z",
+    "updatedAt": "2025-06-02T18:00:00.000Z"
+  },
+  "timestamp": "2025-06-02T18:00:00.000Z"
+}
 ```
 
 ### Session Management & Cleanup
@@ -389,13 +367,13 @@ const authenticatedFetch = async (url, options = {}) => {
 
 // Example: Get user profile
 const getProfile = async () => {
-  const response = await authenticatedFetch('http://localhost:3000/api/profile');
+  const response = await authenticatedFetch('http://localhost:3000/v1/profile');
   return response.json();
 };
 
 // Example: Update profile
 const updateProfile = async (profileData) => {
-  const response = await authenticatedFetch('http://localhost:3000/api/profile', {
+  const response = await authenticatedFetch('http://localhost:3000/v1/profile', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
