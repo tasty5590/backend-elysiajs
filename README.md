@@ -34,22 +34,7 @@ cd backend
 bun install
 ```
 
-2. **Set up OAuth providers:**
-   
-   **Google OAuth:**
-   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select existing one
-   - Enable the Google+ API
-   - Create OAuth 2.0 credentials
-   - Add your domain to authorized origins
-   
-   **Apple Sign In:**
-   - Go to [Apple Developer](https://developer.apple.com/)
-   - Create an App ID with Sign In with Apple capability
-   - Create a Service ID for web authentication
-   - Generate a private key for Apple Sign In
-
-3. **Set up environment variables:**
+2. **Set up environment variables:**
 ```bash
 cp .env.example .env
 # Edit .env with your database URL, auth secret, and OAuth credentials
@@ -59,13 +44,9 @@ Required environment variables:
 ```bash
 DATABASE_URL=postgresql://username:password@localhost:5432/backend_db
 AUTH_SECRET=your-super-secret-key-change-in-production-minimum-32-characters
-GOOGLE_CLIENT_ID=your-google-client-id.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-APPLE_CLIENT_ID=your.apple.bundle.id
-APPLE_CLIENT_SECRET=your-apple-client-secret-or-private-key
 ```
 
-4. **Set up the database:**
+3. **Set up the database:**
 ```bash
 # Generate migrations
 bun run db:generate
@@ -77,7 +58,7 @@ bun run db:migrate
 bun run db:studio
 ```
 
-5. **Start the development server:**
+4. **Start the development server:**
 ```bash
 bun run dev
 ```
